@@ -2,11 +2,14 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:dropdown_search/dropdown_search.dart';
+import 'package:hc05_bluetooth/resultPage.dart';
 import 'package:hc05_bluetooth/styles.dart';
 import 'package:csv/csv.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter_bluetooth_serial/flutter_bluetooth_serial.dart';
+import 'package:hc05_bluetooth/widgets.dart';
 import 'package:permission_handler/permission_handler.dart';
 
 class Hc05Communication extends StatefulWidget {
@@ -54,6 +57,50 @@ class _Hc05CommunicationState extends State<Hc05Communication> {
     )
   ]);
 
+  changeUsToDevice(_value) {
+    setState(() {
+      usToDevice = _value;
+    });
+  }
+
+  changeFrequencyToDevice(_value) {
+    setState(() {
+      frequencyToDevice = _value;
+    });
+  }
+
+  changePressureToDevice(_value) {
+    setState(() {
+      pressureToDevice = _value;
+    });
+  }
+
+  changeRPMToDevice(_value) {
+    setState(() {
+      rpmToDevice = _value;
+    });
+  }
+
+  changeAMPSToDevice(_value) {
+    setState(() {
+      ampsToDevice = _value;
+    });
+  }
+
+  String sendData() {
+    final temp = usToDevice.toString() +
+        ',' +
+        frequencyToDevice.toString() +
+        ',' +
+        pressureToDevice.toString() +
+        ',' +
+        rpmToDevice.toString() +
+        ',' +
+        ampsToDevice.toString();
+    print(temp);
+    return temp;
+  }
+
   loadProfile(int index) {
     try {
       setState(() {
@@ -79,9 +126,32 @@ class _Hc05CommunicationState extends State<Hc05Communication> {
     }
   }
 
+  loadCsv() async {
+    try {
+      File file = File('/storage/emulated/0/Documents/Injectors.csv');
+      final temp = await file
+          .openRead()
+          .transform(utf8.decoder)
+          .transform(new CsvToListConverter(eol: '\r'))
+          .toList();
+      setState(() {
+        temp.removeRange(0, 2);
+        fields = temp;
+      });
+    } catch (e) {
+      setState(() {
+        recentValues =
+            "Error in loading CSV. Please provide the Injectors.csv file in Documents/ folder";
+      });
+    }
+  }
+
   @override
   void initState() {
     super.initState();
+
+    Permission.storage.request();
+    Permission.manageExternalStorage.request();
 
     BluetoothConnection.toAddress(widget.server.address).then((_connection) {
       print('Connected to the device');
@@ -105,6 +175,8 @@ class _Hc05CommunicationState extends State<Hc05Communication> {
       print('Cannot connect, exception occured');
       print(error);
     });
+
+    loadCsv();
   }
 
   @override
@@ -124,12 +196,32 @@ class _Hc05CommunicationState extends State<Hc05Communication> {
     final serverName = widget.server.name ?? "Unknown";
     return Scaffold(
         appBar: AppBar(
-            title: (isConnecting
-                ? Text('Connecting chat to ' + serverName + '...')
-                : isConnected
-                    ? Text('Communication with ' + serverName)
-                    : Text('Chat log with ' + serverName))),
+          title: (isConnecting
+              ? Text('Connecting chat to ' + serverName + '...')
+              : isConnected
+                  ? Text('Communication with ' + serverName)
+                  : Text('Chat log with ' + serverName)),
+          actions: [
+            ElevatedButton(
+                onPressed: () {
+                  if (fields != null) {
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (context) {
+                          return Results(
+                              injector: _chosenValue == null
+                                  ? fields![0]
+                                  : fields![_chosenValue!]);
+                        },
+                      ),
+                    );
+                  }
+                },
+                child: Text("Result"))
+          ],
+        ),
         body: ListView(
+          padding: EdgeInsets.symmetric(horizontal: 8),
           children: [
             SizedBox(height: 16),
             Row(
@@ -138,68 +230,53 @@ class _Hc05CommunicationState extends State<Hc05Communication> {
                 Column(
                   children: [
                     fields == null
-                        ? Container(child: Text('Pls Load csv'))
+                        ? Container(
+                            child: Text("Pls load csv file"),
+                          )
                         : Container(
-                            child: DropdownButton<int>(
-                              focusColor: Colors.white,
-                              value: _chosenValue,
-                              //elevation: 5,
-                              style: TextStyle(color: Colors.white),
-                              iconEnabledColor: Colors.black,
-                              items: fields?.map<DropdownMenuItem<int>>((inj) {
-                                return DropdownMenuItem<int>(
-                                  value: fields?.indexOf(inj),
-                                  child: Text(
-                                    inj[0],
-                                    style: TextStyle(color: Colors.black),
+                            height: 60,
+                            width: 200,
+                            child: DropdownSearch<int>(
+                                mode: Mode.MENU,
+                                itemAsString: (int? u) => fields![u!][0],
+                                items: fields?.map<int>((inj) {
+                                  return fields!.indexOf(inj);
+                                }).toList(),
+                                compareFn: (item, selectedItem) =>
+                                    item == selectedItem,
+                                onChanged: (value) {
+                                  setState(() {
+                                    _chosenValue = value;
+                                  });
+                                },
+                                dropdownSearchDecoration: InputDecoration(
+                                  labelText: "select Injector",
+                                  fillColor: Colors.white,
+                                  focusedBorder: OutlineInputBorder(
+                                    borderSide: BorderSide(
+                                      color: Colors.blue,
+                                    ),
                                   ),
-                                );
-                              }).toList(),
-                              hint: Text(
-                                "Please choose a profile",
-                                style: TextStyle(
-                                    color: Colors.black,
-                                    fontSize: 14,
-                                    fontWeight: FontWeight.w500),
-                              ),
-                              onChanged: (int? value) {
-                                setState(() {
-                                  _chosenValue = value;
-                                });
-                              },
-                            ),
+                                  enabledBorder: OutlineInputBorder(
+                                    borderSide: BorderSide(
+                                      width: .5,
+                                    ),
+                                  ),
+                                ),
+                                showSelectedItems: true,
+                                showSearchBox: true,
+                                selectedItem: _chosenValue),
                           ),
                     Container(
                       width: MediaQuery.of(context).size.width * 0.5,
-                      padding: EdgeInsets.only(left: 5),
                       child: Wrap(
                         spacing: 10,
                         children: [
-                          ElevatedButton(
-                              onPressed: () {
-                                loadProfile(1);
-                              },
-                              child: Text('LEak Test')),
-                          ElevatedButton(
-                              onPressed: () {
-                                loadProfile(8);
-                              },
-                              child: Text('VL Test')),
-                          ElevatedButton(
-                              onPressed: () {
-                                loadProfile(15);
-                              },
-                              child: Text('EM Test')),
-                          ElevatedButton(
-                              onPressed: () {
-                                loadProfile(22);
-                              },
-                              child: Text('LL Test')),
-                          ElevatedButton(
-                              onPressed: () {
-                                loadProfile(29);
-                              },
-                              child: Text('VE Test')),
+                          MyElevatedButton(loadProfile, 1, 'LeaK Test'),
+                          MyElevatedButton(loadProfile, 8, 'VL Test'),
+                          MyElevatedButton(loadProfile, 15, 'EM Test'),
+                          MyElevatedButton(loadProfile, 22, 'LL Test'),
+                          MyElevatedButton(loadProfile, 29, 'VE Test'),
                         ],
                       ),
                     )
@@ -210,161 +287,13 @@ class _Hc05CommunicationState extends State<Hc05Communication> {
                   child: Wrap(
                     spacing: 10,
                     children: [
-                      Container(
-                        height: 80,
-                        width: 120,
-                        child: TextFormField(
-                          controller: _uscontroller,
-                          validator: (value) =>
-                              value == null ? "Enter a valid us" : null,
-                          onChanged: (value) {
-                            setState(() {
-                              usToDevice = int.parse(value);
-                            });
-                          },
-                          keyboardType: TextInputType.number,
-                          decoration: InputDecoration(
-                            labelText: "US",
-                            fillColor: Colors.white,
-                            focusedBorder: OutlineInputBorder(
-                              borderSide: BorderSide(
-                                color: Colors.blue,
-                              ),
-                            ),
-                            enabledBorder: OutlineInputBorder(
-                              borderSide: BorderSide(
-                                width: .5,
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
-                      Container(
-                        height: 80,
-                        width: 120,
-                        child: TextFormField(
-                          controller: _frequencycontroller,
-                          validator: (value) =>
-                              value == null ? "Enter a valid frequency" : null,
-                          onChanged: (value) {
-                            setState(() {
-                              frequencyToDevice = int.parse(value);
-                            });
-                          },
-                          keyboardType: TextInputType.number,
-                          decoration: InputDecoration(
-                            labelText: "Frequency",
-                            fillColor: Colors.white,
-                            focusedBorder: OutlineInputBorder(
-                              borderSide: BorderSide(
-                                color: Colors.blue,
-                              ),
-                            ),
-                            enabledBorder: OutlineInputBorder(
-                              borderSide: BorderSide(
-                                width: .5,
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
-                      Container(
-                        height: 80,
-                        width: 120,
-                        child: TextFormField(
-                          controller: _pressurecontroller,
-                          validator: (value) =>
-                              value == null ? "Enter a valid Pressure" : null,
-                          onChanged: (value) {
-                            setState(() {
-                              pressureToDevice = int.parse(value);
-                            });
-                          },
-                          keyboardType: TextInputType.number,
-                          decoration: InputDecoration(
-                            labelText: "Pressure",
-                            fillColor: Colors.white,
-                            focusedBorder: OutlineInputBorder(
-                              borderSide: BorderSide(
-                                color: Colors.blue,
-                              ),
-                            ),
-                            enabledBorder: OutlineInputBorder(
-                              borderSide: BorderSide(
-                                width: .5,
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
-                      Container(
-                        height: 80,
-                        width: 120,
-                        child: TextFormField(
-                          controller: _rpmcontroller,
-                          validator: (value) =>
-                              value == null ? "Enter a valid RPM" : null,
-                          onChanged: (value) {
-                            setState(() {
-                              rpmToDevice = int.parse(value);
-                            });
-                          },
-                          keyboardType: TextInputType.number,
-                          decoration: InputDecoration(
-                            labelText: "RPM",
-                            fillColor: Colors.white,
-                            focusedBorder: OutlineInputBorder(
-                              borderSide: BorderSide(
-                                color: Colors.blue,
-                              ),
-                            ),
-                            enabledBorder: OutlineInputBorder(
-                              borderSide: BorderSide(
-                                width: .5,
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
-                      Container(
-                        height: 80,
-                        width: 120,
-                        child: TextFormField(
-                          controller: _ampscontroller,
-                          validator: (value) =>
-                              value == null ? "Enter a valid AMPS" : null,
-                          onChanged: (value) {
-                            setState(() {
-                              ampsToDevice = int.parse(value);
-                            });
-                          },
-                          keyboardType: TextInputType.number,
-                          decoration: InputDecoration(
-                            labelText: "AMPS",
-                            fillColor: Colors.blue,
-                            focusedBorder: OutlineInputBorder(
-                              borderSide: BorderSide(
-                                color: Colors.blue,
-                              ),
-                            ),
-                            enabledBorder: OutlineInputBorder(
-                              borderSide: BorderSide(
-                                width: .5,
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
-                      SizedBox(height: 10),
-                      Text(
-                        "Main Std : " + mainStdToDevice.toString(),
-                        style: bigPrice.copyWith(color: Colors.purple),
-                      ),
-                      SizedBox(height: 10),
-                      Text(
-                        "Overflow : " + overflowToDevice.toString(),
-                        style: bigPrice.copyWith(color: Colors.purple),
-                      ),
+                      MyTextField(_uscontroller, changeUsToDevice, "US"),
+                      MyTextField(_frequencycontroller, changeFrequencyToDevice,
+                          "Frequency"),
+                      MyTextField(_pressurecontroller, changePressureToDevice,
+                          "Pressure"),
+                      MyTextField(_rpmcontroller, changeRPMToDevice, "RPM"),
+                      MyTextField(_ampscontroller, changeAMPSToDevice, "AMPS"),
                     ],
                   ),
                 )
@@ -376,62 +305,26 @@ class _Hc05CommunicationState extends State<Hc05Communication> {
               color: Colors.white,
               padding: EdgeInsets.all(10.0),
               child: Table(
+                border: TableBorder.symmetric(
+                    inside: BorderSide(width: 1, color: Colors.blue),
+                    outside: BorderSide(width: 1)),
+                defaultVerticalAlignment: TableCellVerticalAlignment.middle,
                 children: [
                   TableRow(children: [
-                    Container(
-                      color: Colors.amber,
-                      child: Text(
-                        ' US From Device : ',
-                        style: h6color,
-                      ),
-                    ),
-                    Center(
-                        child: Text(
-                      valuesFromDevice[0],
-                      style: h6color,
-                    )),
+                    MyTableContainer(' US From Device : '),
+                    MyTableContent(valuesFromDevice[0]),
                   ]),
-                  rowSpacer,
                   TableRow(children: [
-                    Container(
-                        color: Colors.amber,
-                        child: Text(
-                          ' Frequency From Device :',
-                          style: h6color,
-                        )),
-                    Center(
-                        child: Text(
-                      valuesFromDevice[1],
-                      style: h6color,
-                    )),
+                    MyTableContainer(' Frequency From Device :'),
+                    MyTableContent(valuesFromDevice[1]),
                   ]),
-                  rowSpacer,
                   TableRow(children: [
-                    Container(
-                        color: Colors.amber,
-                        child: Text(
-                          ' Temperature From Device :',
-                          style: h6color,
-                        )),
-                    Center(
-                        child: Text(
-                      valuesFromDevice[2],
-                      style: h6color,
-                    )),
+                    MyTableContainer(' Temperature From Device :'),
+                    MyTableContent(valuesFromDevice[2]),
                   ]),
-                  rowSpacer,
                   TableRow(children: [
-                    Container(
-                        color: Colors.amber,
-                        child: Text(
-                          ' Resistance From Device :',
-                          style: h6color,
-                        )),
-                    Center(
-                        child: Text(
-                      valuesFromDevice[3],
-                      style: h6color,
-                    )),
+                    MyTableContainer(' Resistance From Device :'),
+                    MyTableContent(valuesFromDevice[3]),
                   ])
                 ],
               ),
@@ -441,9 +334,9 @@ class _Hc05CommunicationState extends State<Hc05Communication> {
               children: [
                 ElevatedButton(
                     onPressed: () async {
-                      if (await Permission.manageExternalStorage.isGranted) {
-                        File file = File(
-                            '/storage/emulated/0/Documents/mm_app/Injectors.csv');
+                      try {
+                        File file =
+                            File('/storage/emulated/0/Documents/Injectors.csv');
                         final temp = await file
                             .openRead()
                             .transform(utf8.decoder)
@@ -453,31 +346,48 @@ class _Hc05CommunicationState extends State<Hc05Communication> {
                           temp.removeRange(0, 2);
                           fields = temp;
                         });
-                      } else {
-                        Permission.manageExternalStorage.request();
+                      } catch (e) {
+                        setState(() {
+                          recentValues =
+                              "Error in loading CSV. Please provide the Injectors.csv file in Documents/ folder";
+                        });
                       }
                     },
-                    child: Text('Load csv')),
+                    child: Text(
+                      'Load csv',
+                      style: TextStyle(color: Colors.purple[900]),
+                    )),
                 ElevatedButton(
                     onPressed: () async {
-                      final temp = usToDevice.toString() +
-                          ',' +
-                          frequencyToDevice.toString() +
-                          ',' +
-                          pressureToDevice.toString() +
-                          ',' +
-                          rpmToDevice.toString() +
-                          ',' +
-                          ampsToDevice.toString() +
-                          ',' +
-                          '!';
-                      print(temp);
-                      recentValues = "Send String : " + temp;
-                      _sendMessage(temp);
+                      final String temp = sendData();
+                      recentValues =
+                          "Send String : " + "#" + temp + "," + "strt" + "!";
+                      _sendMessage("#" + temp + "strt" + "!");
+                    },
+                    child: Text('Start')),
+                ElevatedButton(
+                    onPressed: () async {
+                      final String temp = sendData();
+
+                      recentValues = "Send String : " + "#" + temp + "!";
+                      _sendMessage("#" + temp + "!");
                     },
                     child: Text('Send')),
+                ElevatedButton(
+                    onPressed: () async {
+                      final String temp = sendData();
+                      recentValues =
+                          "Send String : " + "#" + temp + "," + "stop" + "!";
+                      _sendMessage("#" + temp + "stop" + "!");
+                    },
+                    child: Text('Stop')),
               ],
             ),
+            SizedBox(height: 10),
+            TextButton(
+                style: TextButton.styleFrom(primary: Colors.amber),
+                onPressed: () {},
+                child: Text("Received message buffer:" + _messageBuffer)),
             SizedBox(height: 10),
             recentValues != null
                 ? Center(
@@ -532,14 +442,21 @@ class _Hc05CommunicationState extends State<Hc05Communication> {
 
     // Create message if there is new line character
     String dataString = String.fromCharCodes(buffer);
-    int index = buffer.indexOf(13);
+
+    int index = buffer.indexOf(35);
     if (~index != 0) {
       setState(() {
+        _messageBuffer = '';
+      });
+    }
+    index = buffer.indexOf(33);
+    if (~index != 0) {
+      setState(() {
+        recentValues = " Received String : " + _messageBuffer;
         final split = _messageBuffer.split(',');
         for (int i = 0; i < split.length; i++) {
           valuesFromDevice[i] = split[i];
         }
-        print(split);
         // _messageBuffer = dataString.substring(index);
         _messageBuffer = '';
       });

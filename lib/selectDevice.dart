@@ -117,7 +117,6 @@ class _SelectBondedDevicePage extends State<SelectBondedDevicePage> {
               enabled: _device.availability == _DeviceAvailability.yes,
               onTap: () {
                 // Navigator.of(context).pop(_device.device);
-                print('hi');
 
                 print('Connect -> selected ' + _device.device.address);
                 _startComm(context, _device.device);

@@ -31,6 +31,9 @@ dependencies:
   flutter_bluetooth_serial: ^0.4.0
   permission_handler: ^8.1.4+2
   csv: ^5.0.0
+  dropdown_search: ^1.0.3
+  screenshot: ^1.2.3
+  pdf: ^3.6.0
 
 dev_dependencies:
   flutter_test:
